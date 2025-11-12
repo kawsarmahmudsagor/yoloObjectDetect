@@ -1,0 +1,19 @@
+[project]
+name = "src"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "ai-edge-litert>=2.0.3",
+    "onnx>=1.19.1",
+    "onnx-graphsurgeon>=0.5.8",
+    "onnx2tf>=1.28.3",
+    "onnxruntime>=1.23.2",
+    "onnxslim>=0.1.74",
+    "roboflow>=1.2.11",
+    "sng4onnx>=1.0.4",
+    "tensorflow==2.19.0",
+    "tf-keras<=2.19.0",
+    "ultralytics>=8.3.227",
+]

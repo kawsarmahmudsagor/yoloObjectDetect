@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>YOLO Pose Keypoints on Browser (Back Camera)</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.12.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite"></script>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: #111;
+      overflow: hidden;
+    }
+    canvas {
+      border: 2px solid #fff;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <video id="webcam" autoplay playsinline style="display:none;"></video>
+
+  <script>
+    const keypointNames = [
+      "big_toe",
+      "small_toe",
+      "inner_ankle",
+      "outer_ankle",
+      "heel",
+      "middle_ankle"
+    ];
+    const imageSize = 320; // same as YOLO input size
+
+    async function run() {
+      tflite.setWasmPath("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/");
+      const model = await tflite.loadTFLiteModel("best_saved_model/best_float32.tflite");
+
+      const video = document.getElementById("webcam");
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      window.addEventListener("resize", resizeCanvas);
+      resizeCanvas();
+
+      // 🔄 Use BACK camera
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      video.srcObject = stream;
+
+      let lastTime = performance.now();
+      let fps = 0;
+
+      function drawVideo() {
+        const videoAspect = video.videoWidth / video.videoHeight;
+        const canvasAspect = canvas.width / canvas.height;
+
+        let drawWidth, drawHeight, offsetX, offsetY;
+        if (canvasAspect > videoAspect) {
+          drawWidth = canvas.width;
+          drawHeight = canvas.width / videoAspect;
+          offsetX = 0;
+          offsetY = (canvas.height - drawHeight) / 2;
+        } else {
+          drawWidth = canvas.height * videoAspect;
+          drawHeight = canvas.height;
+          offsetX = (canvas.width - drawWidth) / 2;
+          offsetY = 0;
+        }
+
+        ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
+        return { drawWidth, drawHeight, offsetX, offsetY };
+      }
+
+      async function detectFrame() {
+        const now = performance.now();
+        fps = 1000 / (now - lastTime);
+        lastTime = now;
+
+        const { drawWidth, drawHeight, offsetX, offsetY } = drawVideo();
+
+        // 🔑 Run inference
+        const detections = await tf.tidy(() => {
+          const input = tf.browser.fromPixels(video)
+            .resizeBilinear([imageSize, imageSize])
+            .expandDims(0)
+            .div(255.0);
+          const output = model.predict(input);
+          return output.arraySync();
+        });
+
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "lime";
+        ctx.fillStyle = "lime";
+
+        // Draw keypoints for each detection
+        detections[0].forEach(det => {
+          const [x1, y1, x2, y2, det_conf, class_id, ...keypoints] = det;
+          if (det_conf < 0.20) return;
+
+          for (let i = 0; i < keypointNames.length; i++) {
+            const kx = keypoints[i * 3];
+            const ky = keypoints[i * 3 + 1];
+            const kconf = keypoints[i * 3 + 2];
+
+            if (kconf > 0.3) { // only draw confident keypoints
+              const px = kx * drawWidth + offsetX;
+              const py = ky * drawHeight + offsetY;
+
+              ctx.beginPath();
+              ctx.arc(px, py, 5, 0, 2 * Math.PI);
+              ctx.fillText(keypointNames[i], px + 6, py - 6);
+              ctx.fill();
+            }
+          }
+        });
+
+        ctx.fillStyle = "red";
+        ctx.font = "20px Arial";
+        ctx.fillText(`FPS: ${fps.toFixed(1)}`, 10, 25);
+
+        requestAnimationFrame(detectFrame);
+      }
+
+      video.addEventListener("loadeddata", () => detectFrame());
+    }
+
+    run();
+  </script>
+</body>
+</html>

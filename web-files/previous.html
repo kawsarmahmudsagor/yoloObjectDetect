@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>YOLO TFLite on Browser</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.12.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite"></script>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: #111;
+      overflow: hidden;
+    }
+
+    canvas {
+      border: 2px solid #fff;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="canvas"></canvas>
+  <video id="webcam" autoplay playsinline style="display:none;"></video>
+
+  <script>
+    const classList = ["eye_center", "head", "left_ear", "neck", "right_ear"];
+    const imageCount = 320; // YOLO input size
+
+    async function run() {
+      tflite.setWasmPath("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/");
+      const model = await tflite.loadTFLiteModel("./model/TFJSLITE_320_NMS_V2_float16.tflite");
+
+      const video = document.getElementById('webcam');
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+
+      // Resize canvas to screen
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      // Rear camera
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      video.srcObject = stream;
+
+      let lastTime = performance.now();
+      let fps = 0;
+
+      function drawVideo() {
+        const videoAspect = video.videoWidth / video.videoHeight;
+        const canvasAspect = canvas.width / canvas.height;
+
+        let drawWidth, drawHeight, offsetX, offsetY;
+
+        if (canvasAspect > videoAspect) {
+          drawWidth = canvas.width;
+          drawHeight = canvas.width / videoAspect;
+          offsetX = 0;
+          offsetY = (canvas.height - drawHeight) / 2;
+        } else {
+          drawWidth = canvas.height * videoAspect;
+          drawHeight = canvas.height;
+          offsetX = (canvas.width - drawWidth) / 2;
+          offsetY = 0;
+        }
+
+        ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
+        return { drawWidth, drawHeight, offsetX, offsetY };
+      }
+
+      async function detectFrame() {
+        console.log(tf.memory());
+        const now = performance.now();
+        fps = 1000 / (now - lastTime);
+        lastTime = now;
+
+        const { drawWidth, drawHeight, offsetX, offsetY } = drawVideo();
+
+        // 🔑 Run inference in tidy to auto-dispose tensors
+        const detections = await tf.tidy(() => {
+          const input = tf.browser.fromPixels(video)
+            .resizeBilinear([imageCount, imageCount])
+            .expandDims(0)
+            .div(255.0);
+
+          const output = model.predict(input);
+          return output.arraySync(); // sync + auto disposed
+        });
+
+        // Draw detections
+        detections[0].forEach(det => {
+          const [x1, y1, x2, y2, conf, classId] = det;
+          if (conf < 0.25) return;
+
+          const x = x1 * drawWidth + offsetX;
+          const y = y1 * drawHeight + offsetY;
+          const w = (x2 - x1) * drawWidth;
+          const h = (y2 - y1) * drawHeight;
+
+          const label = classList[Math.floor(classId)] || "unknown";
+
+          ctx.strokeStyle = "lime";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x, y, w, h);
+
+          ctx.fillStyle = "lime";
+          ctx.font = "16px Arial";
+          ctx.fillText(`${label} ${(conf * 100).toFixed(1)}%`, x, y > 10 ? y - 5 : 10);
+        });
+
+        ctx.fillStyle = "red";
+        ctx.font = "20px Arial";
+        ctx.fillText(`FPS: ${fps.toFixed(1)}`, 10, 25);
+
+        requestAnimationFrame(detectFrame);
+      }
+
+      video.addEventListener('loadeddata', () => {
+        detectFrame();
+      });
+    }
+
+    run();
+  </script>
+</body>
+
+</html>
