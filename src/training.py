@@ -5,4 +5,4 @@ from ultralytics import YOLO
 model = YOLO("yolo11n-pose.pt")  # load a pretrained model (recommended for training)
 
 # Train the model
-results = model.train(data="/home/sagor/Projects/YOLO/src/Foot-Landmark-Detection-1/data.yaml", epochs=100, imgsz=320)
+results = model.train(data="/home/sagor/Projects/YOLO/src/Foot-Landmark-Detection-3/data.yaml", epochs=200, imgsz=320)
