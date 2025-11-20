@@ -5,6 +5,6 @@ build/
 dist/
 wheels/
 *.egg-info
-src/Foot-Landmark-Detection-4/
+src/Foot-Landmark-Detection-5/
 # Virtual environments
 .venv
