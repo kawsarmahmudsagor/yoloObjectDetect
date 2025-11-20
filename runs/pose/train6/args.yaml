@@ -1,7 +1,7 @@
 task: pose
 mode: train
 model: yolo11n-pose.pt
-data: /home/sagor/Projects/YOLO/src/Foot-Landmark-Detection-4/data.yaml
+data: /home/sagor/Projects/YOLO/src/Foot-Landmark-Detection-6/data.yaml
 epochs: 250
 time: null
 patience: 100
